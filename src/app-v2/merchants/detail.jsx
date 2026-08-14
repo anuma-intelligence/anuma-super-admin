@@ -6,6 +6,16 @@ import { ArrowLeft, PowerOff, Power, Tag, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   useAssignPlanMutation,
   useDeleteMerchantMutation,
   useGetMerchantQuery,
@@ -45,6 +55,7 @@ export default function MerchantDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [assignOpen, setAssignOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { data: merchant, isLoading, error } = useGetMerchantQuery(id);
   const [updateMerchant, { isLoading: updating }] = useUpdateMerchantMutation();
@@ -83,13 +94,15 @@ export default function MerchantDetail() {
   };
 
   const onDelete = async () => {
-    if (!confirm("Delete this merchant? This cannot be undone.")) return;
     try {
       await deleteMerchant(id).unwrap();
       toast.success("Merchant deleted");
+      setDeleteOpen(false);
       navigate("/merchants");
     } catch (err) {
       toast.error(err?.data?.detail || "Delete failed");
+      // Keep the dialog open so the toast reads against the same context and
+      // the admin can retry without re-navigating.
     }
   };
 
@@ -160,7 +173,7 @@ export default function MerchantDetail() {
             variant="outline"
             size="sm"
             className="text-destructive hover:text-destructive"
-            onClick={onDelete}
+            onClick={() => setDeleteOpen(true)}
             disabled={deleting}
           >
             <Trash2 className="mr-1.5 h-4 w-4" /> Delete
@@ -201,6 +214,37 @@ export default function MerchantDetail() {
         submitting={assigning}
         onAssign={onAssign}
       />
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {merchant.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the merchant
+              <span className="font-mono"> {merchant.handle} </span>
+              along with its {userCount} user assignment
+              {userCount === 1 ? "" : "s"}, enabled modules and plan
+              subscription. This cannot be undone — deactivate instead if you
+              only need to suspend access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              // preventDefault keeps Radix from auto-closing, so a failed
+              // delete leaves the dialog up for a retry.
+              onClick={(e) => {
+                e.preventDefault();
+                onDelete();
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete merchant"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
