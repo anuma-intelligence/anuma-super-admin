@@ -1,12 +1,16 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Settings2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToggleModuleMutation } from "@/api/services/merchants";
 import { cn } from "@/lib/utils";
+
+import ModuleConfigDialog from "./module-config-dialog";
+import { specFor, summariseConfig } from "../module-config-spec";
 
 const groupOf = (code) => {
   if (!code) return "other";
@@ -24,7 +28,16 @@ const compareMerchantModules = (a, b) => {
   return (a.module_code || "").localeCompare(b.module_code || "");
 };
 
-function ModuleTile({ mod, busy, onToggle }) {
+// A module with per-merchant settings (module-config-spec.js) gets a gear that
+// opens ModuleConfigDialog, plus a badge naming the non-default setup so you can
+// tell at a glance which merchants have been moved off the standard build. The
+// gear is hidden while the module is off — configuring a shell nobody can open
+// only invites confusion about why nothing changed.
+function ModuleTile({ mod, busy, onToggle, merchantId }) {
+  const [configOpen, setConfigOpen] = useState(false);
+  const configurable = Boolean(specFor(mod.module_code));
+  const summary = summariseConfig(mod.module_code, mod.config);
+
   return (
     <div
       className={cn(
@@ -42,19 +55,43 @@ function ModuleTile({ mod, busy, onToggle }) {
               core
             </Badge>
           ) : null}
+          {summary ? (
+            <Badge className="shrink-0 text-[10px] font-normal">{summary}</Badge>
+          ) : null}
         </div>
         <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
           {mod.module_code}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1">
         {busy ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        ) : null}
+        {configurable && mod.is_enabled ? (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              title={`${mod.module_name} settings`}
+              aria-label={`${mod.module_name} settings`}
+              onClick={() => setConfigOpen(true)}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+            </Button>
+            <ModuleConfigDialog
+              open={configOpen}
+              onOpenChange={setConfigOpen}
+              merchantId={merchantId}
+              mod={mod}
+            />
+          </>
         ) : null}
         <Switch
           checked={Boolean(mod.is_enabled)}
           disabled={busy}
           onCheckedChange={(next) => onToggle(mod.module_id, next)}
+          className="ml-1"
         />
       </div>
     </div>
@@ -106,7 +143,8 @@ export default function MerchantModulesPanel({ merchantId, merchantModules }) {
         <div>
           <h2 className="text-sm font-semibold text-foreground">Modules</h2>
           <p className="text-xs text-muted-foreground">
-            {totalEnabled} of {total} enabled — toggle to update this merchant.
+            {totalEnabled} of {total} enabled — toggle to update this merchant, or
+            open the gear where a module has settings.
           </p>
         </div>
         <div className="relative">
@@ -140,6 +178,7 @@ export default function MerchantModulesPanel({ merchantId, merchantModules }) {
                   <ModuleTile
                     key={mod.module_id}
                     mod={mod}
+                    merchantId={merchantId}
                     busy={toggling && originalArgs?.module_id === mod.module_id}
                     onToggle={onToggle}
                   />
